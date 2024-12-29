@@ -1,70 +1,34 @@
-# JCLIP
+# 环境配置
 
-[[Blog]](https://openai.com/blog/clip/) [[Paper]](https://arxiv.org/abs/2103.00020)
+1. 请将ViT-B-32.pkl放在JCLIP目录下
+2. Dataset目录存放TrainSet，TestSet。其中valid.txt取TrainSet中的10张图作为验证集。valid_b.txt在valid.txt的基础上增加了Stanford-cars，若要使用，请将Stanford-cars数据集下载放到TrainSet目录下。
 
+# 文件介绍
 
-JCLIP为CLIP的Jittor版本，CLIP（Contrastive Language-Image Pre-Training）是一个在各种（图像、文本）对上训练的神经网络。可以用自然语言指示它在给定图像的情况下预测最相关的文本片段，而无需直接对任务进行优化，这与 GPT-2和3的zero-shot功能类似。
+提供了在A榜使用的模型。
 
+- train.py
+- train.sh
+- test.py
 
-## 网络结构
+由于B榜的测试集添加了car但没有训练集。原有的效果不好，因此B榜的结果为clip微调。
 
-![CLIP](CLIP.png)
+- clip_ft.py
 
+- train_clip_ft.py
 
-## 使用方法
+- test_clip_ft.py
 
-### 安装依赖环境
-```bash
-pip install jittor
-pip install ftfy regex tqdm
-python setup.py develop
-```
+# 思路介绍
 
-### 模型权重
+## A榜
 
-下载[VIT-B-32](https://github.com/uyzhang/JCLIP/releases/tag/%E6%9D%83%E9%87%8D)或利用转换脚本，将PyTorch权重转换为Jittor权重。
+使用了Cross-Modal Few-Shot Learning with Multimodal Models中的办法作为基础并进行模型修改。
 
-```python
-import torch
-import jittor as jt
-clip = torch.load('ViT-B-32.pt').state_dict()
+在该方法中，图片和图片的描述均作为分类器的样本，但是两种样本的是否同样重要。当我们只使用图片，相比于图片+图片的描述，降了一个点；只使用图片的描述，则完全不行。因此，在B榜准备尝试，将图片和图片的描述分别计算loss，然后赋予不同权重相加。以期望通过loss对模型输入图片和图片的描述样本的重要程度。
 
-for k in clip.keys():
-    clip[k] = clip[k].float().cpu()
-jt.save(clip, 'ViT-B-32.pkl')
-```
+但因car没有样本，最终未使用。
 
+## B榜
 
-### demo
-```python
-import jittor as jt
-import jclip as clip
-from PIL import Image
-
-jt.flags.use_cuda = 1
-
-model, preprocess = clip.load("ViT-B-32.pkl")
-
-image = preprocess(Image.open("CLIP.png")).unsqueeze(0)
-
-text = clip.tokenize(["a diagram", "a dog", "a cat"])
-
-with jt.no_grad():
-    logits_per_image, logits_per_text = model(image, text)
-    probs = logits_per_image.softmax(dim=-1).numpy()
-
-print("Label probs:", probs)  # prints: [[0.9927937  0.00421068 0.00299572]]
-```
-
-
-## 第四届计图比赛Baseline
-- Training-Free版本
-```bash
-python baseline.py
-```
-- Training版本
-```bash
-python baseline_ft.py
-```
-
-得到result.txt，打包为zip，提交即可。
+在descri_class_google.txt，我们通过使用google翻译对类别的描述进行适当的补充。对于那些常见的事物，clip模型有着较高的识别率。对于少见的事物，我们尝试提供一些有辨别力的特征描述，以提高识别率。
